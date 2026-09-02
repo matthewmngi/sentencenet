@@ -1,0 +1,6 @@
+preprocessing.ipynb
+data/tiny_stories_no_quotes.csv
+lookup.txt
+sentences.txt
+plan.md
+.venv/**
