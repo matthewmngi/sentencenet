@@ -10,11 +10,11 @@ The goal of this project is to study how well small language models can produce 
 
 ## Abstract
 
-I start with a simple MLP, using stochastic gradient descent and simple linear layers, along with layer normalization and `tanh` nonlinearity. Each example consists of 8 tokens, with each token being one word or one part of a word (in the case of `'s` and others). This MLP predicts the individual probabilities of the next tokens.  
+I start with a simple MLP, using stochastic gradient descent and simple linear layers, along with layer normalization and `tanh` nonlinearity. Each example consists of 8 tokens, with each token being one word or one part of a word (in the case of `'s`, among others). This MLP predicts the individual probabilities of the next tokens.  
 
-Piece by piece, I assemble more complex (and thus, more powerful) models, analyzing their performance along the way through measuring cross-entropy loss on training and validation sets, as well as sampling sentences from the model. The PyTorch API is used to quickly iterate on model architectures. However, the implementation is kept highly custom to make experimentation easier, using custom layers when needed.
+Gradually, I assemble more complex (and thus, more powerful) models, analyzing their respective performances by measuring cross-entropy loss on training and validation sets, as well as sampling sentences from the models. The PyTorch API is used to quickly iterate on model architectures. However, the implementation is kept highly custom to make experimentation easier, using custom layers when needed.
 
-I use the Penn Treebank dataset in this project, which contains a 10,000-token vocabulary, which replaces words outside of the selected vocabulary with the `<unk>`. Numbers are also replaced by the `N` token.
+I use the Penn Treebank dataset in this project, which contains a 10,000-token vocabulary. It replaces words outside of the selected vocabulary with the `<unk>` token. Similarly, numbers are replaced with the `N` token.
 
 ## Repository structure
 
@@ -29,7 +29,7 @@ I use the Penn Treebank dataset in this project, which contains a 10,000-token v
 
 The model's vocabulary contains 10,000 individual words and word parts. Each is assigned an index from `0` to `9999`.
 
-From the training set, I create `887521` training examples by sliding an eight character context length over each sentence in the dataset.
+From the training set, I create `887521` training examples by sliding an eight-character context length over each sentence in the dataset. A placeholder token, `<n>` in this case, is used when a sentence does not fill this context length. `<n>` also used as a stop token, placed at the end of each sentence.
 
 ### Split
 
@@ -43,15 +43,19 @@ From the training set, I create `887521` training examples by sliding an eight c
 
 | Version | Description | # of parameters | Optimizer |
 | --- | --- | --- | --- |
-| v1 | MLP with word embedding, linear layers, layer normalization<sup>3</sup> tanh nonlinearity, and WaveNet-style<sup>4</sup> flattening (see note #3) | `x` | Stochastic gradient descent (SGD) |
+| v1 | MLP with word embedding<sup>2</sup>, linear layers, layer normalization<sup>3</sup> tanh nonlinearity, and WaveNet-style<sup>4</sup> flattening (see note #3) | `x` | Stochastic gradient descent (SGD) |
 | v2 | Same architecture as above  | `x` | AdamW |
 | v3 | RNN with word embedding, four recurrent layers<sup>5</sup>, and tanh nonlinearity | `x` | AdamW |
 | v4 | Same architecture as above, but with layer normalization and WaveNet-style flattening | `x` | AdamW |
 
 #### Notes
 1. Embedding dimensionality is kept constant, at `32`
-2. Learning rate was adjusted slightly when switching to the AdamW optimizer (`0.01` to `0.01` or `0.025`), which typically works better when it is set 
-3. Flattening of input sequence is inspired by the Google DeepMind's WaveNet
+2. Learning rate was adjusted slightly when switching to the AdamW optimizer (`0.01` to `0.01` or `0.025`), which typically works better with a lower learning rate
+3. Flattening of input sequence is inspired by the Google DeepMind's WaveNet, modeled below:
+
+```
+8-token input sequence -> 4 representations -> 2 representations -> single representation
+```
 
 ### v1 - MLP with Stochastic Gradient Descent
 #### Architecture
@@ -81,7 +85,7 @@ I keep the same general architecture as v1, but replace stochastic gradient desc
 
 The goal of this version is to test whether a more modern optimizer improves the model's training without changing the underlying architecture. AdamW helps the model optimize more smoothly than plain SGD, leading to lower training and validation loss while maintaining the same recurrent-style MLP structure. 
 
-At this point, the sampled text begins to become noticeably more readable and coherent, though some overfitting starts to occur.
+At this point, the sampled text begins to become noticeably more readable and coherent (see "Sampling" section), though some overfitting starts to occur.
 
 ### v3 - RNN
 #### Architecture
@@ -91,7 +95,7 @@ previous 8 words -> 32-dim embedding -> 4-layer RNN w/ tanh -> WaveNet-style fla
 
 #### Description
 
-I replace the fixed MLP blocks from the earlier experiments with a recurrent stack. Each token in the previous eight-word context is embedded in a 32-dimensional space and passed through a 4-layer RNN with tanh nonlinearity. The recurrent hidden states are then flattened and projected to the vocabulary, producing probabilities for the next word.
+I replace the fixed MLP blocks from the earlier experiments with a recurrent stack. Each token in the previous eight-word context is embedded in a 32-dimensional space and passed through a 4-layer RNN with tanh nonlinearity. The recurrent hidden states are then projected to the vocabulary, producing probabilities for the next word.
 
 The goal of this version is to test whether recurrence across the context window is more useful than the strictly feedforward MLP. 
 
@@ -100,7 +104,7 @@ The RNN is substantially more expressive, and it reaches lower training loss tha
 ### v4 - RNN + Layer Normalization
 #### Architecture
 ```
-previous 8 words -> 32-dim embedding -> 4-layer RNN w/ layer normalization in between each recurrent layer -> WaveNet-style flattening -> next word probabilities
+previous 8 words -> 32-dim embedding -> 4-layer RNN w/ layer normalization in between each recurrent layer & tanh non-linearity -> WaveNet-style flattening -> next word probabilities
 ```
 
 #### Description
@@ -108,6 +112,8 @@ previous 8 words -> 32-dim embedding -> 4-layer RNN w/ layer normalization in be
 I extend the recurrent model from v3 by applying layer normalization to the hidden states of the recurrent stack before the final projection. The main goal is to reduce the large training/validation gap in the unnormalized RNN. 
 
 As in the MLP experiments, I keep a WaveNet-inspired flattening strategy so the 8-token context is gradually reduced to a single representation before the final linear layer produces the next-word probabilities.
+
+A possible flaw in this version is the choice of placing layer normalization after each RNN layer, meaning the activations pass through the tanh nonlinearity before being normalized. I plan to iterate on this in the future.
 
 ## Results
 
@@ -143,9 +149,7 @@ the charges includes N N east partnership has lost N N to N N N senior subordina
 Sentences sampled from `v4`:
 
 ```
-he says this 
-
-for like 
+he says this for like 
 
 the closed-end herbert <unk> rain who write to personally dr. 
 
@@ -160,44 +164,54 @@ The probability of the stop token (`<n>`) seems to have been significantly incre
 
 ## Setup
 
-This project is built with Python and PyTorch. The notebooks assume that the dataset parquet files are available in the project root.
+This project is built with Python and PyTorch. The notebooks assume that the dataset parquet files are available in the `data` folder, located in the repository root.
 
-1. Clone the repository and move into it:
+1. **Clone the repository and move into it:**
    ```powershell
-   git clone https://github.com/<your-user>/sentencenet.git
+   git clone https://github.com/matthewmngi/sentencenet.git
    cd sentencenet
    ```
 
-2. Create a virtual environment:
+2. **Create a virtual environment:**
    ```powershell
-   py -3.11 -m venv .venv
-   .\.venv\Scripts\Activate.ps1
+   python -m venv .venv
+   .venv\Scripts\activate
    ```
 
-3. Install the required dependencies:
+3. **Install the required dependencies:**
    ```powershell
-   python -m pip install --upgrade pip
-   python -m pip install -r requirements.txt
+   pip install -r requirements.txt
    ```
 
-   If you want the CPU-only PyTorch build, this is usually sufficient. If you have a CUDA-capable GPU, you may prefer the CUDA-enabled build for better training speed.
-
-4. Ensure the dataset files are present in the repository root:
+4. Ensure the dataset files are present in the `data` folder:
    - `train.parquet`
    - `validation.parquet`
    - `test.parquet`
 
-5. Launch the notebooks:
-   ```powershell
-   jupyter lab
-   ```
-   or
-   ```powershell
-   jupyter notebook
-   ```
-
-6. Open either `mlp.ipynb` or `rnn.ipynb` and run the cells in order. The notebooks initialize the vocabulary and dataset from the parquet files automatically.
+5. Open either `mlp.ipynb` or `rnn.ipynb` and run the cells in order. The notebooks initialize the vocabulary and dataset from the parquet files automatically.
 
 Notes:
 - The project uses `torch.device("cuda" if torch.cuda.is_available() else "cpu")`, so it will run on CPU or GPU depending on your machine.
 - If the notebook fails to find the dataset, confirm that the parquet files are in the expected folder and update the paths in the notebook accordingly.
+
+## Reproducibility notes
+
+I use fixed seeds in several places, specifically `2147483647`-based seeds for PyTorch generators. Actual results, even when using the same seeds as in this project, may differ slightly.
+
+## References
+
+[1] M. Marcus, M. Marcinkiewicz~, and B. Santorini, “Building a Large Annotated Corpus of English: The Penn Treebank.” Accessed: Sept. 06, 2026. [Online]. Available: https://aclanthology.org/J93-2004.pdf
+
+[2] Y. Bengio et al., “A Neural Probabilistic Language Model,” Journal of Machine Learning Research, vol. 3, pp. 1137–1155, 2003, Accessed: Aug. 23, 2026. [Online]. Available: https://www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf
+
+[3] J. L. Ba, J. R. Kiros, and G. E. Hinton, “Layer Normalization,” arXiv:1607.06450 [cs, stat], July 2016, Accessed: Sept. 06, 2026. [Online]. Available: https://arxiv.org/abs/1607.06450
+
+
+[4] A. Van Den Oord et al., “WAVENET: A GENERATIVE MODEL for RAW AUDIO,” Sep. 2016. Accessed: Aug. 23, 2026. [Online]. Available: https://arxiv.org/pdf/1609.03499
+
+
+[5] T. Mikolov, M. Karafiát, L. Burget, H. Černocký, and S. Khudanpur, “Recurrent Neural Network Based Language Model,” Sep. 2010. Accessed: Aug. 23, 2026. [Online]. Available: https://www.fit.vut.cz/research/group/speech/public/publi/2010/mik
+
+
+
+
